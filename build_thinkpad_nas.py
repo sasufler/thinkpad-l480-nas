@@ -69,6 +69,27 @@ PARAMS = {
     "L480_Y_END": 287.0,
     "L480_Z_START": 22.0,
     "L480_Z_END": 152.0,
+
+    # Rear Brush Cable Pass-Through & Power Grommet
+    "BRUSH_CX": 28.0,
+    "BRUSH_CZ": 84.0,
+    "BRUSH_CUT_W": 20.0,         # X = 18..38
+    "BRUSH_CUT_H": 86.0,         # Z = 41..127 (R = 10 at Z = 51, 117)
+    "BRUSH_PLATE_W": 32.0,       # X = 12..44
+    "BRUSH_PLATE_H": 112.0,      # Z = 28..140
+    "BRUSH_PLATE_T": 3.0,        # Y = 294.1..297.1
+    "BRUSH_SLOT_W": 16.0,        # X = 20..36
+    "BRUSH_SLOT_H": 82.0,        # Z = 43..125 (R = 8)
+    "BRUSH_MOUNT_DX": 10.0,      # X = 18, 38
+    "BRUSH_MOUNT_DZ": 50.0,      # Z = 34, 134
+    "GROMMET_CX": 158.0,
+    "GROMMET_CZ": 16.0,
+    "GROMMET_BORE_D": 18.0,      # Rear_Panel through-hole (Z = 7..25)
+    "GROMMET_FLANGE_D": 24.0,    # Outer flange Y = 294.1..296.6
+    "GROMMET_NECK_D": 17.6,      # Barrel neck Y = 289.2..294.1
+    "GROMMET_LIP_D": 20.0,       # Inner retaining lip Y = 287.8..289.2
+    "GROMMET_CABLE_D": 8.0,      # Center cable bore
+    "GROMMET_SLIT_W": 3.5,       # Radial entry slit along -X
 }
 
 DOC_NAME = "ThinkPad_L480_NAS"
@@ -82,6 +103,9 @@ EXPORT_PARTS = [
     ("ThinkPad_Red_Accent", "ThinkPad_Red_Accent.stl"),
     ("Front_Bezel_Text", "Front_Bezel_Text.stl"),
     ("Rear_Panel", "Rear_Panel.stl"),
+    ("Rear_Brush_Plate", "Rear_Brush_Plate.stl"),
+    ("Rear_Brush_Insert", "Rear_Brush_Insert.stl"),
+    ("Rear_Power_Grommet", "Rear_Power_Grommet.stl"),
     ("Left_Cover_Front", "Left_Cover_Front.stl"),
     ("Left_Cover_Rear", "Left_Cover_Rear.stl"),
     ("HDD_Tray_1", "HDD_Tray.stl"),  # Assembly coords (cradle floor parallel to XY, Z-up)
@@ -102,6 +126,26 @@ def cyl_y(cx, y1, y2, cz, r):
 
 def cyl_z(cx, cy, z1, z2, r):
     return Part.makeCylinder(r, z2 - z1, App.Vector(cx, cy, z1), App.Vector(0, 0, 1))
+
+
+def stadium_y(cx, y1, y2, cz, w, h):
+    """Vertical stadium prism along Y (width w along X, total height h along Z, semicircular ends)."""
+    r = 0.5 * w
+    z_lo = cz - 0.5 * h + r
+    z_hi = cz + 0.5 * h - r
+    p1 = App.Vector(cx - r, y1, z_lo)
+    p2 = App.Vector(cx - r, y1, z_hi)
+    p3 = App.Vector(cx + r, y1, z_hi)
+    p4 = App.Vector(cx + r, y1, z_lo)
+    p_top = App.Vector(cx, y1, z_hi + r)
+    p_bot = App.Vector(cx, y1, z_lo - r)
+    wire = Part.Wire([
+        Part.makeLine(p1, p2),
+        Part.Arc(p2, p_top, p3).toShape(),
+        Part.makeLine(p3, p4),
+        Part.Arc(p4, p_bot, p1).toShape(),
+    ])
+    return Part.Face(wire).extrude(App.Vector(0, y2 - y1, 0))
 
 
 def add_part(doc, group, name, shape, color=(0.14, 0.14, 0.15), transparency=0):
@@ -477,26 +521,31 @@ def build_rear_panel():
     fcx = PARAMS["FAN_CX"]                             # 117.0
     fcz = PARAMS["FAN_CZ"]                             # 90.0
     span_half = PARAMS["FAN_MOUNT_SPAN"] * 0.5         # 52.5
+    bcx = PARAMS["BRUSH_CX"]                           # 28.0
+    bcz = PARAMS["BRUSH_CZ"]                           # 84.0
+    bdx = PARAMS["BRUSH_MOUNT_DX"]                     # 10.0
+    bdz = PARAMS["BRUSH_MOUNT_DZ"]                     # 50.0
 
     panel = box(0.0, y1, 0.0, W, y2, H)
 
     cuts = [
         # 120mm fan circular bore
         cyl_y(fcx, y1 - 1.0, y2 + 1.0, fcz, PARAMS["FAN_BORE_D"] * 0.5),
-        # L480 upper CPU exhaust louver slots (6x 32x4.5mm)
+        # Left brush cable pass-through stadium cutout (20x86mm, R=10)
+        stadium_y(bcx, y1 - 1.0, y2 + 1.0, bcz, PARAMS["BRUSH_CUT_W"], PARAMS["BRUSH_CUT_H"]),
+        # 2x upper L480 CPU exhaust louver slots above brush plate
+        box(14.0, y1 - 1.0, 144.0, 42.0, y2 + 1.0, 148.5),
+        box(14.0, y1 - 1.0, 151.0, 42.0, y2 + 1.0, 155.5),
+        # Bottom-right round power grommet bore (Ø18mm behind Pico PSU)
+        cyl_y(PARAMS["GROMMET_CX"], y1 - 1.0, y2 + 1.0, PARAMS["GROMMET_CZ"],
+              PARAMS["GROMMET_BORE_D"] * 0.5),
     ]
-    for i in range(6):
-        zz = 118.0 + i * 7.0
-        cuts.append(box(12.0, y1 - 1.0, zz, 44.0, y2 + 1.0, zz + 4.5))
 
-    # Mid auxiliary I/O cutout
-    cuts.append(box(14.0, y1 - 1.0, 68.0, 42.0, y2 + 1.0, 106.0))
-    # Cat6 RJ45 Ethernet cutout
-    cuts.append(box(12.0, y1 - 1.0, 38.0, 28.5, y2 + 1.0, 55.5))
-    # USB-C 65W charger pass-through
-    cuts.append(box(31.0, y1 - 1.0, 42.0, 47.0, y2 + 1.0, 52.0))
-    # 12V DC barrel jack hole (Ø12.2mm)
-    cuts.append(cyl_y(28.0, y1 - 1.0, y2 + 1.0, 20.0, 6.1))
+    # 4x brush plate M3 mounting holes
+    for sx in (-1.0, 1.0):
+        for sz in (-1.0, 1.0):
+            cuts.append(cyl_y(bcx + sx * bdx, y1 - 1.0, y2 + 1.0, bcz + sz * bdz,
+                              PARAMS["M3_CLEAR_D"] * 0.5))
 
     # 4x 120mm fan mounting holes (105x105mm)
     for sx in (-1.0, 1.0):
@@ -524,6 +573,84 @@ def build_rear_panel():
     for gp in grille_parts:
         panel = panel.fuse(gp)
     return panel
+
+
+def build_rear_brush_plate():
+    """Bolted rear brush pass-through outer frame (Y=294.1..297.1, 0.1mm clear of Rear_Panel)."""
+    bcx = PARAMS["BRUSH_CX"]
+    bcz = PARAMS["BRUSH_CZ"]
+    pw_h = PARAMS["BRUSH_PLATE_W"] * 0.5
+    ph_h = PARAMS["BRUSH_PLATE_H"] * 0.5
+    y1 = PARAMS["TOTAL_D"] + 0.1                       # 294.1
+    y2 = y1 + PARAMS["BRUSH_PLATE_T"]                  # 297.1
+
+    plate = box(bcx - pw_h, y1, bcz - ph_h, bcx + pw_h, y2, bcz + ph_h)
+
+    # Subtle 0.8mm outer chamfer on rear face (Y=297.1)
+    outer_edges = [
+        e for e in plate.Edges
+        if abs(e.BoundBox.YMin - y2) < 0.01 and abs(e.BoundBox.YMax - y2) < 0.01
+    ]
+    if outer_edges:
+        plate = plate.makeChamfer(0.8, outer_edges)
+
+    cuts = [
+        # Centered stadium cable slot (16x82mm, R=8)
+        stadium_y(bcx, y1 - 1.0, y2 + 1.0, bcz, PARAMS["BRUSH_SLOT_W"], PARAMS["BRUSH_SLOT_H"]),
+        # Inner clamping recess (X=15..41, Z=39..129, 1.5mm deep on Y=294.1..295.6)
+        box(bcx - 13.0, y1 - 0.5, bcz - 45.0, bcx + 13.0, y1 + 1.5, bcz + 45.0),
+    ]
+    for sx in (-1.0, 1.0):
+        for sz in (-1.0, 1.0):
+            cuts.append(cyl_y(bcx + sx * PARAMS["BRUSH_MOUNT_DX"], y1 - 1.0, y2 + 1.0,
+                              bcz + sz * PARAMS["BRUSH_MOUNT_DZ"], PARAMS["M3_CLEAR_D"] * 0.5))
+
+    return plate.cut(Part.makeCompound(cuts))
+
+
+def build_rear_brush_insert():
+    """Printable TPU flexible comb/brush insert seated inside Rear_Brush_Plate clamping recess."""
+    bcx = PARAMS["BRUSH_CX"]
+    bcz = PARAMS["BRUSH_CZ"]
+    y1 = PARAMS["TOTAL_D"] + 0.2                       # 294.2 (>=0.2mm clear of Rear_Panel)
+    y2 = PARAMS["TOTAL_D"] + 1.4                       # 295.4 (>=0.2mm clear of recess floor 295.6)
+
+    insert = box(bcx - 12.6, y1, bcz - 44.6, bcx + 12.6, y2, bcz + 44.6)  # X=15.4..40.6, Z=39.4..128.6
+
+    cuts = [
+        # Vertical 0.8mm center slit across slot span Z=43..125 (keeps top/bottom clamping bars intact)
+        box(bcx - 0.4, y1 - 0.5, bcz - 41.0, bcx + 0.4, y2 + 0.5, bcz + 41.0),
+    ]
+    # Horizontal 0.8mm flex slits every 4.0mm along Z=46..122 (symmetric around Z=84, anchored to 4.2mm spines)
+    for zz in range(46, 124, 4):
+        cuts.append(box(bcx - 8.4, y1 - 0.5, float(zz) - 0.4, bcx + 8.4, y2 + 0.5, float(zz) + 0.4))
+
+    return insert.cut(Part.makeCompound(cuts))
+
+
+def build_rear_power_grommet():
+    """Snap-in split round cable grommet at bottom-right Rear_Panel bore (X=158, Z=16)."""
+    cx = PARAMS["GROMMET_CX"]
+    cz = PARAMS["GROMMET_CZ"]
+    y_outer_1 = PARAMS["TOTAL_D"] + 0.1                # 294.1
+    y_outer_2 = y_outer_1 + 2.5                        # 296.6
+    y_neck_1 = PARAMS["TOTAL_D"] - PARAMS["REAR_PANEL_D"] - 0.8  # 289.2
+    y_lip_1 = y_neck_1 - 1.4                           # 287.8
+
+    flange = cyl_y(cx, y_outer_1, y_outer_2, cz, PARAMS["GROMMET_FLANGE_D"] * 0.5)
+    neck = cyl_y(cx, y_neck_1, y_outer_1, cz, PARAMS["GROMMET_NECK_D"] * 0.5)
+    lip = cyl_y(cx, y_lip_1, y_neck_1, cz, PARAMS["GROMMET_LIP_D"] * 0.5)
+    grommet = flange.fuse(neck).fuse(lip)
+
+    slit_half = PARAMS["GROMMET_SLIT_W"] * 0.5
+    cuts = [
+        # Center Ø8.0mm cable bore
+        cyl_y(cx, y_lip_1 - 1.0, y_outer_2 + 1.0, cz, PARAMS["GROMMET_CABLE_D"] * 0.5),
+        # 3.5mm radial entry slit along -X for pre-terminated 12V plug
+        box(cx - PARAMS["GROMMET_FLANGE_D"] * 0.5 - 1.0, y_lip_1 - 1.0, cz - slit_half,
+            cx, y_outer_2 + 1.0, cz + slit_half),
+    ]
+    return grommet.cut(Part.makeCompound(cuts))
 
 
 def build_left_cover(y1, y2, hole_ys):
@@ -675,6 +802,9 @@ def build_all():
     add_part(doc, g_panels, "ThinkPad_Red_Accent", build_red_accent(), (0.85, 0.08, 0.08))
     add_part(doc, g_panels, "Front_Bezel_Text", build_thinkbox_text(), (0.76, 0.56, 0.32))
     add_part(doc, g_panels, "Rear_Panel", build_rear_panel(), (0.14, 0.14, 0.15))
+    add_part(doc, g_panels, "Rear_Brush_Plate", build_rear_brush_plate(), (0.18, 0.19, 0.21))
+    add_part(doc, g_panels, "Rear_Brush_Insert", build_rear_brush_insert(), (0.06, 0.06, 0.07))
+    add_part(doc, g_panels, "Rear_Power_Grommet", build_rear_power_grommet(), (0.08, 0.08, 0.09))
     add_part(doc, g_panels, "Left_Cover_Front",
              build_left_cover(6.0, 158.0, (20.0, 153.0)), (0.14, 0.14, 0.15))
     add_part(doc, g_panels, "Left_Cover_Rear",
